@@ -106,3 +106,9 @@ func (d diff) Moved() bool {
 func (d diff) Importing() bool {
 	return d.change.Change.Importing != nil
 }
+
+func (d *diff) Forgetting() bool {
+    // Logic to determine if the diff represents a "forget" action
+    return d.action == plans.Forget
+}
+

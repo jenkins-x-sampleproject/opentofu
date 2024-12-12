@@ -24,6 +24,12 @@ import (
 const (
 	detectedDrift  string = "drift"
 	proposedChange string = "change"
+	Create plans.Action = iota
+        Update
+        Delete
+        Forget // Add this action
+
+	
 )
 
 type Plan struct {
@@ -37,10 +43,7 @@ type Plan struct {
 	ProviderSchemas       map[string]*jsonprovider.Provider `json:"provider_schemas"`
 }
 
-type diff struct {
-    // Other fields
-    forgetting int
-}
+
 
 
 func (plan Plan) getSchema(change jsonplan.ResourceChange) *jsonprovider.Schema {

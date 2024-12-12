@@ -16,6 +16,15 @@ import (
 	"github.com/opentofu/opentofu/internal/states"
 )
 
+type Hook interface {
+    PreApplyImport(addr addrs.ResourceAddress, details ImportDetails)
+    PostApplyImport(addr addrs.ResourceAddress, details ImportDetails)
+    
+    // Add these for Forget functionality
+    PreApplyForget(addr addrs.ResourceAddress, details ForgetDetails)
+    PostApplyForget(addr addrs.ResourceAddress, details ForgetDetails)
+}
+
 // MockHook is an implementation of Hook that can be used for tests.
 // It records all of its function calls.
 type MockHook struct {

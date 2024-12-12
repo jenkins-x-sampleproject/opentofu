@@ -75,6 +75,7 @@ func (v *ApplyHuman) ResourceCount(stateOutPath string) {
 			v.countHook.Added,
 			v.countHook.Changed,
 			v.countHook.Removed,
+			v.countHook.Forgotten,
 		)
 	} else {
 		v.view.streams.Printf(
@@ -82,6 +83,7 @@ func (v *ApplyHuman) ResourceCount(stateOutPath string) {
 			v.countHook.Added,
 			v.countHook.Changed,
 			v.countHook.Removed,
+			v.countHook.Forgotten,
 		)
 	}
 	if (v.countHook.Added > 0 || v.countHook.Changed > 0) && stateOutPath != "" {
@@ -144,6 +146,7 @@ func (v *ApplyJSON) ResourceCount(stateOutPath string) {
 		Change:    v.countHook.Changed,
 		Remove:    v.countHook.Removed,
 		Import:    v.countHook.Imported,
+		Forget:    v.countHook.Forgotten,
 		Operation: operation,
 	})
 }

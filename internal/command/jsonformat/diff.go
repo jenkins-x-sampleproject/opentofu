@@ -108,7 +108,7 @@ func (d diff) Importing() bool {
 }
 
 func (d *diff) Forgetting() bool {
-    // Logic to determine if the diff represents a "forget" action
-    return d.action == plans.Forget
+    // Replace `action` with the appropriate field name representing the action
+    return d.change.Change.Actions[0] == plans.Forget
 }
 

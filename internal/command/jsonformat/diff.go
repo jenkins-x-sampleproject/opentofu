@@ -108,7 +108,12 @@ func (d diff) Importing() bool {
 }
 
 func (d diff) Forgetting() bool {
-    // Check if the primary action is "Forget"
-    return jsonplan.UnmarshalActions(d.change.Change.Actions) == plans.Forget
+    actions := jsonplan.UnmarshalActions(d.change.Change.Actions)
+    for _, action := range actions {
+        if action == plans.Forget {
+            return true
+        }
+    }
+    return false
 }
 

@@ -37,6 +37,11 @@ type Plan struct {
 	ProviderSchemas       map[string]*jsonprovider.Provider `json:"provider_schemas"`
 }
 
+type diff struct {
+    // Other fields
+    forgetting int
+}
+
 func (plan Plan) getSchema(change jsonplan.ResourceChange) *jsonprovider.Schema {
 	switch change.Mode {
 	case jsonstate.ManagedResourceMode:

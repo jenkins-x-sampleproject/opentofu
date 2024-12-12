@@ -70,7 +70,7 @@ func (v *ApplyHuman) ResourceCount(stateOutPath string) {
 		)
 	} else if v.countHook.Imported > 0 || v.countHook.Forgotten > 0 {
 		v.view.streams.Printf(
-			v.view.colorize.Color("[reset][bold][green]\nApply complete! Resources: %d imported, %d added, %d changed, %d destroyed.\n"),
+			v.view.colorize.Color("[reset][bold][green]\nApply complete! Resources: %d imported, %d added, %d changed, %d destroyed, %d forgotten.\n"),
 			v.countHook.Imported,
 			v.countHook.Added,
 			v.countHook.Changed,

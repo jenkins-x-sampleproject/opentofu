@@ -107,7 +107,7 @@ func (d diff) Importing() bool {
 	return d.change.Change.Importing != nil
 }
 
-func (d *diff) Forgetting() bool {
+func (d diff) Forgetting() bool {
     // Check if the primary action is "Forget"
     return jsonplan.UnmarshalActions(d.change.Change.Actions) == plans.Forget
 }

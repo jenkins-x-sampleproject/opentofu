@@ -42,6 +42,7 @@ type diff struct {
     forgetting int
 }
 
+
 func (plan Plan) getSchema(change jsonplan.ResourceChange) *jsonprovider.Schema {
 	switch change.Mode {
 	case jsonstate.ManagedResourceMode:
@@ -69,6 +70,7 @@ func (plan Plan) renderHuman(renderer Renderer, mode plans.Mode, opts ...plans.Q
 	willPrintResourceChanges := false
 	counts := make(map[plans.Action]int)
 	importingCount := 0
+	forgettingCount := 0
 	var changes []diff
 	for _, diff := range diffs.changes {
 		action := jsonplan.UnmarshalActions(diff.change.Change.Actions)
@@ -86,11 +88,11 @@ func (plan Plan) renderHuman(renderer Renderer, mode plans.Mode, opts ...plans.Q
 		if diff.Importing() {
 			importingCount++
 		}
-
+		
 		if diff.forgetting() {
 			forgettingCount++
 		}
-		
+
 		// Don't count move-only changes
 		if action != plans.NoOp {
 			willPrintResourceChanges = true

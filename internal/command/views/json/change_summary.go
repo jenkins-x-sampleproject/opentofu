@@ -20,6 +20,7 @@ type ChangeSummary struct {
 	Change    int       `json:"change"`
 	Import    int       `json:"import"`
 	Remove    int       `json:"remove"`
+	Forget    int       `json:"forget"`
 	Operation Operation `json:"operation"`
 }
 

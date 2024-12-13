@@ -108,6 +108,7 @@ func TestApply_resourceCount(t *testing.T) {
 		destroy   bool
 		want      string
 		importing bool
+		forgetting bool
 	}{
 		"apply": {
 			false,

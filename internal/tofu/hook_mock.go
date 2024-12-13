@@ -16,15 +16,6 @@ import (
 	"github.com/opentofu/opentofu/internal/states"
 )
 
-type Hook interface {
-    PreApplyImport(addr addrs.ResourceAddress, details ImportDetails)
-    PostApplyImport(addr addrs.ResourceAddress, details ImportDetails)
-    
-    // Add these for Forget functionality
-    PreApplyForget(addr addrs.ResourceAddress, details ForgetDetails)
-    PostApplyForget(addr addrs.ResourceAddress, details ForgetDetails)
-}
-
 // MockHook is an implementation of Hook that can be used for tests.
 // It records all of its function calls.
 type MockHook struct {
@@ -142,6 +133,14 @@ type MockHook struct {
 	PostApplyImportReturn HookAction
 	PostApplyImportError  error
 
+	PreApplyForgetCalled bool
+	PreApplyForgetReturn HookAction
+        PreApplyForgetError  error
+
+	PostApplyForgetCalled bool
+	PostApplyForgetReturn HookAction
+	PostApplyForgetError  error
+	
 	StoppingCalled bool
 
 	PostStateUpdateCalled bool
@@ -335,6 +334,23 @@ func (h *MockHook) PostApplyImport(addr addrs.AbsResourceInstance, importing pla
 	h.PostApplyImportAddr = addr
 	return h.PostApplyImportReturn, h.PostApplyImportError
 }
+
+func (h *MockHook) PreApplyForget(_ addrs.AbsResourceInstance) (HookAction, error) {
+	h.Lock()
+	defer h.Unlock()
+
+	h.PreApplyForgetCalled = true
+	return h.PreApplyForgetReturn, h.PreApplyForgetError
+}
+
+func (h *MockHook) PostApplyForget(_ addrs.AbsResourceInstance) (HookAction, error) {
+	h.Lock()
+	defer h.Unlock()
+
+	h.PostApplyForgetCalled = true
+	return h.PostApplyForgetReturn, h.PostApplyForgetError
+}
+
 
 func (h *MockHook) Stopping() {
 	h.Lock()

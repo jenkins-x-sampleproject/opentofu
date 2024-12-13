@@ -18,6 +18,9 @@ import (
 	"github.com/opentofu/opentofu/internal/states"
 	"github.com/opentofu/opentofu/internal/tfdiags"
 )
+type ForgetAction struct {
+	Details string // Example field for ForgetAction
+}
 
 // Apply performs the actions described by the given Plan object and returns
 // the resulting updated state.
@@ -103,6 +106,22 @@ Note that the -target and -exclude options are not suitable for routine use, and
 	}
 
 	return newState, diags
+}
+func (c *Context) removeResourceFromState(addr addrs.ResourceAddr) {
+	log.Printf("[DEBUG] Removing resource %s from state", addr)
+	// Implement the logic to remove the resource from the state
+}
+
+type Hook interface {
+	PreApplyImport(addr addrs.ResourceAddr, action ForgetAction)
+	PostApplyImport(addr addrs.ResourceAddr, action ForgetAction)
+	PreApplyForget(addr addrs.ResourceAddr, action ForgetAction)
+	PostApplyForget(addr addrs.ResourceAddr, action ForgetAction)
+}
+
+type ResourceInstanceChangeSrc struct {
+	Importing  *ForgetAction
+	Forgetting *ForgetAction
 }
 
 //nolint:revive,unparam // TODO remove validate bool as it's not used

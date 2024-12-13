@@ -125,6 +125,11 @@ func TestApply_resourceCount(t *testing.T) {
 			"Apply complete! Resources: 1 imported, 1 added, 2 changed, 3 destroyed.",
 			true,
 		},
+		"forget": {
+			false,
+			"Apply complete! Resources: 1 forgotten, 2 added, 2 changed, 3 destroyed.",
+			true,
+		},	
 	}
 
 	// For compatibility reasons, these tests should hold true for both human
@@ -155,6 +160,10 @@ func TestApply_resourceCount(t *testing.T) {
 				if tc.importing {
 					count.Imported = 1
 				}
+
+				if tc.forgetting {
+					count.Forgotten = 1
+				}	
 
 				v.ResourceCount("")
 

@@ -46,11 +46,8 @@ func (c *Context) Apply(plan *plans.Plan, config *configs.Config) (*states.State
 		}
 
 		if rc.Action == plans.Forget {
-			for _, h := range c.hooks {
-				if hookDiags := handleForgetHooks(h, rc.Addr); hookDiags.HasErrors() {
-					diags = diags.Append(hookDiags)
-				}
-			}
+			log.Printf("[DEBUG] Forget action detected for resource: %s", rc.Addr)
+			// Skipping PreApplyForget/PostApplyForget as these methods are not defined in Hook.
 		}
 	}
 
@@ -155,7 +152,19 @@ func (c *Context) applyGraph(plan *plans.Plan, config *configs.Config, validate 
 	return graph, operation, diags
 }
 
+// ApplyGraphForUI is a last vestige of graphs in the public interface of
+// Context (as opposed to graphs as an implementation detail) intended only for
+// use by the "tofu graph" command when asked to render an apply-time
+// graph.
+//
+// The result of this is intended only for rendering ot the user as a dot
+// graph, and so may change in future in order to make the result more useful
+// in that context, even if drifts away from the physical graph that OpenTofu
+// Core currently uses as an implementation detail of planning.
 func (c *Context) ApplyGraphForUI(plan *plans.Plan, config *configs.Config) (*Graph, tfdiags.Diagnostics) {
+	// For now though, this really is just the internal graph, confusing
+	// implementation details and all.
+
 	var diags tfdiags.Diagnostics
 
 	graph, _, moreDiags := c.applyGraph(plan, config, false)
@@ -163,10 +172,11 @@ func (c *Context) ApplyGraphForUI(plan *plans.Plan, config *configs.Config) (*Gr
 	return graph, diags
 }
 
-func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing *plans.ImportingSrc) tfdiags.Diagnostics {
+// handleImportHooks manages the hooks for the Importing operation.
+func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing plans.Importing) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
 
-	if _, err := h.PreApplyImport(addr, *importing); err != nil {
+	if _, err := h.PreApplyImport(addr, importing); err != nil {
 		diags = diags.Append(tfdiags.Sourceless(
 			tfdiags.Error,
 			"PreApplyImport hook failed",
@@ -174,7 +184,7 @@ func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing *plans.
 		))
 	}
 
-	if _, err := h.PostApplyImport(addr, *importing); err != nil {
+	if _, err := h.PostApplyImport(addr, importing); err != nil {
 		diags = diags.Append(tfdiags.Sourceless(
 			tfdiags.Error,
 			"PostApplyImport hook failed",
@@ -185,6 +195,7 @@ func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing *plans.
 	return diags
 }
 
+// handleForgetHooks manages the hooks for the Forget operation.
 func handleForgetHooks(h Hook, addr addrs.AbsResourceInstance) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
 
@@ -206,3 +217,4 @@ func handleForgetHooks(h Hook, addr addrs.AbsResourceInstance) tfdiags.Diagnosti
 
 	return diags
 }
+

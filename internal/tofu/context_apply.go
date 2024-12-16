@@ -107,3 +107,25 @@ func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing *plans.
 
     return diags
 }
+
+// Example definition for the applyGraph method
+func (c *Context) applyGraph(plan *plans.Plan, config *configs.Config, isApply bool) (graph *Graph, operation string, diags tfdiags.Diagnostics) {
+    // Your implementation logic for building the graph and determining the operation.
+    // This is where you build the execution plan graph and handle any diagnostics.
+    
+    // Placeholder for your actual graph generation logic:
+    graph = &Graph{}  // Assuming Graph is a type you have defined elsewhere.
+    operation = "apply"  // Example operation name. This could vary depending on your logic.
+
+    // Example of creating diagnostics in case of errors or warnings
+    if someConditionThatFails {
+        diags = diags.Append(tfdiags.Sourceless(
+            tfdiags.Error,
+            "Graph generation failed",
+            "An error occurred while generating the apply graph.",
+        ))
+    }
+
+    return graph, operation, diags
+}
+

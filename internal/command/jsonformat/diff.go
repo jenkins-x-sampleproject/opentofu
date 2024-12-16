@@ -107,13 +107,4 @@ func (d diff) Importing() bool {
 	return d.change.Change.Importing != nil
 }
 
-func (d diff) Forgetting() bool {
-    actions := jsonplan.UnmarshalActions(d.change.Change.Actions)
-    for _, action := range actions {
-        if action == plans.Forget {
-            return true
-        }
-    }
-    return false
-}
 

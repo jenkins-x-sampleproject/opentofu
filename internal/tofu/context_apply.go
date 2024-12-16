@@ -6,6 +6,7 @@
 package tofu
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/opentofu/opentofu/internal/tfdiags"
 )
 
+// Apply applies the given plan and configuration, returning the resulting state and diagnostics.
 func (c *Context) Apply(plan *plans.Plan, config *configs.Config) (*states.State, tfdiags.Diagnostics) {
 	defer c.acquireRun("apply")()
 
@@ -35,8 +37,6 @@ func (c *Context) Apply(plan *plans.Plan, config *configs.Config) (*states.State
 
 	var diags tfdiags.Diagnostics
 	for _, rc := range plan.Changes.Resources {
-		// Import is a no-op change during an apply (all the real action happens during the plan) but we'd
-		// like to show some helpful output that mirrors the way we show other changes.
 		if rc.Importing != nil {
 			for _, h := range c.hooks {
 				if hookDiags := handleImportHooks(h, rc.Addr, rc.Importing); hookDiags.HasErrors() {
@@ -45,7 +45,6 @@ func (c *Context) Apply(plan *plans.Plan, config *configs.Config) (*states.State
 			}
 		}
 
-		// Following the same logic, we want to show helpful output for forget operations as well.
 		if rc.Action == plans.Forget {
 			for _, h := range c.hooks {
 				if hookDiags := handleForgetHooks(h, rc.Addr); hookDiags.HasErrors() {
@@ -55,24 +54,24 @@ func (c *Context) Apply(plan *plans.Plan, config *configs.Config) (*states.State
 		}
 	}
 
-	graph, operation, diags := c.applyGraph(plan, config, true)
+	ctx := context.Background() // Create a standard context
+	graph, operation, graphDiags := c.applyGraph(plan, config, true)
+	diags = diags.Append(graphDiags)
 	if diags.HasErrors() {
 		return nil, diags
 	}
 
 	workingState := plan.PriorState.DeepCopy()
-	walker, walkDiags := c.walk(c, graph, operation, &graphWalkOpts{
-		Config:     config,
-		InputState: workingState,
-		Changes:    plan.Changes,
-		PlanTimeCheckResults: plan.Checks,
-		PlanTimeTimestamp:   plan.Timestamp,
+	walker, walkDiags := c.walk(ctx, graph, operation, &graphWalkOpts{
+		Config:                config,
+		InputState:            workingState,
+		Changes:               plan.Changes,
+		PlanTimeCheckResults:  plan.Checks,
+		PlanTimeTimestamp:     plan.Timestamp,
 	})
 	diags = diags.Append(walker.NonFatalDiagnostics)
 	diags = diags.Append(walkDiags)
 
-	// After the walk is finished, we capture a simplified snapshot of the
-	// check result data as part of the new state.
 	walker.State.RecordCheckResults(walker.Checks)
 
 	newState := walker.State.Close()
@@ -157,9 +156,6 @@ func (c *Context) applyGraph(plan *plans.Plan, config *configs.Config, validate 
 }
 
 func (c *Context) ApplyGraphForUI(plan *plans.Plan, config *configs.Config) (*Graph, tfdiags.Diagnostics) {
-	// For now though, this really is just the internal graph, confusing
-	// implementation details and all.
-
 	var diags tfdiags.Diagnostics
 
 	graph, _, moreDiags := c.applyGraph(plan, config, false)
@@ -167,11 +163,10 @@ func (c *Context) ApplyGraphForUI(plan *plans.Plan, config *configs.Config) (*Gr
 	return graph, diags
 }
 
-// handleImportHooks manages the hooks for the Importing operation.
 func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing *plans.ImportingSrc) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
 
-	if _, err := h.PreApplyImport(addr, importing); err != nil {
+	if _, err := h.PreApplyImport(addr, *importing); err != nil {
 		diags = diags.Append(tfdiags.Sourceless(
 			tfdiags.Error,
 			"PreApplyImport hook failed",
@@ -179,7 +174,7 @@ func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing *plans.
 		))
 	}
 
-	if _, err := h.PostApplyImport(addr, importing); err != nil {
+	if _, err := h.PostApplyImport(addr, *importing); err != nil {
 		diags = diags.Append(tfdiags.Sourceless(
 			tfdiags.Error,
 			"PostApplyImport hook failed",
@@ -190,7 +185,6 @@ func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing *plans.
 	return diags
 }
 
-// handleForgetHooks manages the hooks for the Forget operation.
 func handleForgetHooks(h Hook, addr addrs.AbsResourceInstance) tfdiags.Diagnostics {
 	var diags tfdiags.Diagnostics
 

@@ -6,7 +6,6 @@
 package tofu
 
 import (
-	"context"
 	"fmt"
 	"log"
 
@@ -18,13 +17,16 @@ import (
 	"github.com/opentofu/opentofu/internal/states"
 	"github.com/opentofu/opentofu/internal/tfdiags"
 )
-type ForgetAction struct {
-	Details string // Example field for ForgetAction
-}
 
 // Apply performs the actions described by the given Plan object and returns
 // the resulting updated state.
-func (c *Context) Apply(ctx context.Context, plan *plans.Plan, config *configs.Config) (*states.State, tfdiags.Diagnostics) {
+//
+// The given configuration *must* be the same configuration that was passed
+// earlier to Context.Plan in order to create this plan.
+//
+// Even if the returned diagnostics contains errors, Apply always returns the
+// resulting state which is likely to have been partially-updated.
+func (c *Context) Apply(plan *plans.Plan, config *configs.Config) (*states.State, tfdiags.Diagnostics) {
 	defer c.acquireRun("apply")()
 
 	log.Printf("[DEBUG] Building and walking apply graph for %s plan", plan.UIMode)
@@ -39,93 +41,93 @@ func (c *Context) Apply(ctx context.Context, plan *plans.Plan, config *configs.C
 		return nil, diags
 	}
 
-	// Iterate through the resources and process the different actions
 	for _, rc := range plan.Changes.Resources {
-		// If the resource is being imported, process the import action
+		// Import is a no-op change during an apply (all the real action happens during the plan) but we'd
+		// like to show some helpful output that mirrors the way we show other changes.
 		if rc.Importing != nil {
 			for _, h := range c.hooks {
-				h.PreApplyImport(rc.Addr, *rc.Importing)
-				h.PostApplyImport(rc.Addr, *rc.Importing)
+				if hookDiags := handleImportHooks(h, rc.Addr, *rc.Importing); hookDiags.HasErrors() {
+					diags = diags.Append(hookDiags)
+				}
 			}
-		} else if rc.Forgetting != nil { // If the resource is being forgotten
+		}
+
+		// Following the same logic, we want to show helpful output for forget operations as well.
+		if rc.Action == plans.Forget {
 			for _, h := range c.hooks {
-				h.PreApplyForget(rc.Addr, *rc.Forgetting)
-				h.PostApplyForget(rc.Addr, *rc.Forgetting)
+				if hookDiags := handleForgetHooks(h, rc.Addr); hookDiags.HasErrors() {
+					diags = diags.Append(hookDiags)
+				}
 			}
-			// Remove the resource from the state
-			log.Printf("[INFO] Forgetting resource: %s", rc.Addr)
-			// Assuming removeResourceFromState is a method to remove the resource from state
-			c.removeResourceFromState(rc.Addr)
 		}
 	}
 
-	providerFunctionTracker := make(ProviderFunctionMapping)
-
-	// Apply the graph to update the state
-	graph, operation, diags := c.applyGraph(plan, config, true, providerFunctionTracker)
+	graph, operation, diags := c.applyGraph(plan, config, true)
 	if diags.HasErrors() {
 		return nil, diags
 	}
 
-	// Deep copy the previous state and apply the changes
 	workingState := plan.PriorState.DeepCopy()
-	walker, walkDiags := c.walk(ctx, graph, operation, &graphWalkOpts{
+	walker, walkDiags := c.walk(graph, operation, &graphWalkOpts{
 		Config:     config,
 		InputState: workingState,
 		Changes:    plan.Changes,
+
+		// We need to propagate the check results from the plan phase,
+		// because that will tell us which checkable objects we're expecting
+		// to see updated results from during the apply step.
 		PlanTimeCheckResults: plan.Checks,
-		PlanTimeTimestamp:    plan.Timestamp,
-		ProviderFunctionTracker: providerFunctionTracker,
+
+		// We also want to propagate the timestamp from the plan file.
+		PlanTimeTimestamp: plan.Timestamp,
 	})
 	diags = diags.Append(walker.NonFatalDiagnostics)
 	diags = diags.Append(walkDiags)
 
-	// Finalize state after applying changes
+	// After the walk is finished, we capture a simplified snapshot of the
+	// check result data as part of the new state.
 	walker.State.RecordCheckResults(walker.Checks)
 
 	newState := walker.State.Close()
 	if plan.UIMode == plans.DestroyMode && !diags.HasErrors() {
+		// NOTE: This is a vestigial violation of the rule that we mustn't
+		// use plan.UIMode to affect apply-time behavior.
+		// We ideally ought to just call newState.PruneResourceHusks
+		// unconditionally here, but we historically didn't and haven't yet
+		// verified that it'd be safe to do so.
 		newState.PruneResourceHusks()
 	}
 
-	// Handle warnings related to target/exclude filters
-	if len(plan.TargetAddrs) > 0 || len(plan.ExcludeAddrs) > 0 {
+	if len(plan.TargetAddrs) > 0 {
 		diags = diags.Append(tfdiags.Sourceless(
 			tfdiags.Warning,
 			"Applied changes may be incomplete",
-			`The plan was created with the -target or the -exclude option in effect, so some changes requested in the configuration may have been ignored and the output values may not be fully updated. Run the following command to verify that no other changes are pending:
+			`The plan was created with the -target option in effect, so some changes requested in the configuration may have been ignored and the output values may not be fully updated. Run the following command to verify that no other changes are pending:
     tofu plan
 	
-Note that the -target and -exclude options are not suitable for routine use, and are provided only for exceptional situations such as recovering from errors or mistakes, or when OpenTofu specifically suggests to use it as part of an error message.`,
+Note that the -target option is not suitable for routine use, and is provided only for exceptional situations such as recovering from errors or mistakes, or when OpenTofu specifically suggests to use it as part of an error message.`,
 		))
 	}
 
-	// Handle refresh-only plans
+	// FIXME: we cannot check for an empty plan for refresh-only, because root
+	// outputs are always stored as changes. The final condition of the state
+	// also depends on some cleanup which happens during the apply walk. It
+	// would probably make more sense if applying a refresh-only plan were
+	// simply just returning the planned state and checks, but some extra
+	// cleanup is going to be needed to make the plan state match what apply
+	// would do. For now we can copy the checks over which were overwritten
+	// during the apply walk.
+	// Despite the intent of UIMode, it must still be used for apply-time
+	// differences in destroy plans too, so we can make use of that here as
+	// well.
 	if plan.UIMode == plans.RefreshOnlyMode {
 		newState.CheckResults = plan.Checks.DeepCopy()
 	}
 
 	return newState, diags
 }
-func (c *Context) removeResourceFromState(addr addrs.ResourceAddr) {
-	log.Printf("[DEBUG] Removing resource %s from state", addr)
-	// Implement the logic to remove the resource from the state
-}
 
-type Hook interface {
-	PreApplyImport(addr addrs.ResourceAddr, action ForgetAction)
-	PostApplyImport(addr addrs.ResourceAddr, action ForgetAction)
-	PreApplyForget(addr addrs.ResourceAddr, action ForgetAction)
-	PostApplyForget(addr addrs.ResourceAddr, action ForgetAction)
-}
-
-type ResourceInstanceChangeSrc struct {
-	Importing  *ForgetAction
-	Forgetting *ForgetAction
-}
-
-//nolint:revive,unparam // TODO remove validate bool as it's not used
-func (c *Context) applyGraph(plan *plans.Plan, config *configs.Config, validate bool, providerFunctionTracker ProviderFunctionMapping) (*Graph, walkOperation, tfdiags.Diagnostics) {
+func (c *Context) applyGraph(plan *plans.Plan, config *configs.Config, validate bool) (*Graph, walkOperation, tfdiags.Diagnostics) {
 	var diags tfdiags.Diagnostics
 
 	variables := InputValues{}
@@ -166,21 +168,26 @@ func (c *Context) applyGraph(plan *plans.Plan, config *configs.Config, validate 
 
 	operation := walkApply
 	if plan.UIMode == plans.DestroyMode {
+		// FIXME: Due to differences in how objects must be handled in the
+		// graph and evaluated during a complete destroy, we must continue to
+		// use plans.DestroyMode to switch on this behavior. If all objects
+		// which require special destroy handling can be tracked in the plan,
+		// then this switch will no longer be needed and we can remove the
+		// walkDestroy operation mode.
+		// TODO: Audit that and remove walkDestroy as an operation mode.
 		operation = walkDestroy
 	}
 
 	graph, moreDiags := (&ApplyGraphBuilder{
-		Config:                  config,
-		Changes:                 plan.Changes,
-		State:                   plan.PriorState,
-		RootVariableValues:      variables,
-		Plugins:                 c.plugins,
-		Targets:                 plan.TargetAddrs,
-		Excludes:                plan.ExcludeAddrs,
-		ForceReplace:            plan.ForceReplaceAddrs,
-		Operation:               operation,
-		ExternalReferences:      plan.ExternalReferences,
-		ProviderFunctionTracker: providerFunctionTracker,
+		Config:             config,
+		Changes:            plan.Changes,
+		State:              plan.PriorState,
+		RootVariableValues: variables,
+		Plugins:            c.plugins,
+		Targets:            plan.TargetAddrs,
+		ForceReplace:       plan.ForceReplaceAddrs,
+		Operation:          operation,
+		ExternalReferences: plan.ExternalReferences,
 	}).Build(addrs.RootModuleInstance)
 	diags = diags.Append(moreDiags)
 	if moreDiags.HasErrors() {
@@ -194,10 +201,64 @@ func (c *Context) applyGraph(plan *plans.Plan, config *configs.Config, validate 
 // Context (as opposed to graphs as an implementation detail) intended only for
 // use by the "tofu graph" command when asked to render an apply-time
 // graph.
+//
+// The result of this is intended only for rendering ot the user as a dot
+// graph, and so may change in future in order to make the result more useful
+// in that context, even if drifts away from the physical graph that OpenTofu
+// Core currently uses as an implementation detail of planning.
 func (c *Context) ApplyGraphForUI(plan *plans.Plan, config *configs.Config) (*Graph, tfdiags.Diagnostics) {
+	// For now though, this really is just the internal graph, confusing
+	// implementation details and all.
+
 	var diags tfdiags.Diagnostics
 
-	graph, _, moreDiags := c.applyGraph(plan, config, false, make(ProviderFunctionMapping))
+	graph, _, moreDiags := c.applyGraph(plan, config, false)
 	diags = diags.Append(moreDiags)
 	return graph, diags
+}
+
+// handleImportHooks manages the hooks for the Importing operation.
+func handleImportHooks(h Hook, addr addrs.AbsResourceInstance, importing plans.Importing) tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
+
+	if _, err := h.PreApplyImport(addr, importing); err != nil {
+		diags = diags.Append(tfdiags.Sourceless(
+			tfdiags.Error,
+			"PreApplyImport hook failed",
+			err.Error(),
+		))
+	}
+
+	if _, err := h.PostApplyImport(addr, importing); err != nil {
+		diags = diags.Append(tfdiags.Sourceless(
+			tfdiags.Error,
+			"PostApplyImport hook failed",
+			err.Error(),
+		))
+	}
+
+	return diags
+}
+
+// handleForgetHooks manages the hooks for the Forget operation.
+func handleForgetHooks(h Hook, addr addrs.AbsResourceInstance) tfdiags.Diagnostics {
+	var diags tfdiags.Diagnostics
+
+	if _, err := h.PreApplyForget(addr); err != nil {
+		diags = diags.Append(tfdiags.Sourceless(
+			tfdiags.Error,
+			"PreApplyForget hook failed",
+			err.Error(),
+		))
+	}
+
+	if _, err := h.PostApplyForget(addr); err != nil {
+		diags = diags.Append(tfdiags.Sourceless(
+			tfdiags.Error,
+			"PostApplyForget hook failed",
+			err.Error(),
+		))
+	}
+
+	return diags
 }

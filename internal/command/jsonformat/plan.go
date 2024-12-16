@@ -92,7 +92,7 @@ func (plan Plan) renderHuman(renderer Renderer, mode plans.Mode, opts ...plans.Q
 			importingCount++
 		}
 		
-		if diff.Forgetting() {
+		if action ==plans.Forget {
 			forgettingCount++
 		}
 

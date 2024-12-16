@@ -240,8 +240,7 @@ func (plan Plan) renderHuman(renderer Renderer, mode plans.Mode, opts ...plans.Q
 		if importingCount > 0 {
 			renderer.Streams.Printf(
 				
-				renderer.Colorize.Color("\n[bold][green]Apply complete![reset] Resources: %d imported, %d forgotten, %d added, %d changed, %d destroyed.\n"),
-				importingCount,
+				renderer.Colorize.Color("\n[bold]Plan:[reset] %d to import, %d to add, %d to change, %d to destroy, %d to forget.\n"),
 				forgettingCount,
 				counts[plans.Create]+counts[plans.DeleteThenCreate]+counts[plans.CreateThenDelete],
 				counts[plans.Update],
@@ -249,7 +248,7 @@ func (plan Plan) renderHuman(renderer Renderer, mode plans.Mode, opts ...plans.Q
 		} else if forgettingCount > 0 {
 			renderer.Streams.Printf(
 				
-				renderer.Colorize.Color("\n[bold][green]Apply complete![reset] Resources: %d forgotten, %d added, %d changed, %d destroyed.\n"),
+				renderer.Colorize.Color("\n[bold]Plan:[reset] %d to import, %d to add, %d to change, %d to destroy.\n"),
 				forgettingCount,
 				counts[plans.Create]+counts[plans.DeleteThenCreate]+counts[plans.CreateThenDelete],
 				counts[plans.Update],
@@ -257,7 +256,7 @@ func (plan Plan) renderHuman(renderer Renderer, mode plans.Mode, opts ...plans.Q
 		} else {
 			renderer.Streams.Printf(
 				
-				renderer.Colorize.Color("\n[bold][green]Apply complete![reset] Resources: %d added, %d changed, %d destroyed.\n"),
+				renderer.Colorize.Color("\n[bold]Plan:[reset] %d to add, %d to change, %d to destroy.\n"),
 				counts[plans.Create]+counts[plans.DeleteThenCreate]+counts[plans.CreateThenDelete],
 				counts[plans.Update],
 				counts[plans.Delete]+counts[plans.DeleteThenCreate]+counts[plans.CreateThenDelete])
